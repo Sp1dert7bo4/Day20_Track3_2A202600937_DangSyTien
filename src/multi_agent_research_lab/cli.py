@@ -18,6 +18,8 @@ console = Console()
 
 
 def _init() -> None:
+    from dotenv import load_dotenv
+    load_dotenv()
     settings = get_settings()
     configure_logging(settings.log_level)
 
@@ -26,16 +28,28 @@ def _init() -> None:
 def baseline(
     query: Annotated[str, typer.Option("--query", "-q", help="Research query")],
 ) -> None:
-    """Run a minimal single-agent baseline placeholder."""
+    """Run a real single-agent baseline."""
 
     _init()
     request = ResearchQuery(query=query)
     state = ResearchState(request=request)
-    state.final_answer = (
-        "Baseline skeleton response. TODO(student): replace this with a real single-agent "
-        "implementation and record latency/cost/quality metrics."
-    )
-    console.print(Panel.fit(state.final_answer, title="Single-Agent Baseline"))
+    
+    from multi_agent_research_lab.services.llm_client import LLMClient
+    import time
+    
+    llm = LLMClient()
+    system_prompt = "You are a helpful research assistant. Find information and answer the user's query comprehensively."
+    
+    start_time = time.time()
+    try:
+        response = llm.complete(system_prompt, query)
+        state.final_answer = response.content
+        latency = time.time() - start_time
+        console.print(f"[bold green]Baseline latency:[/bold green] {latency:.2f}s")
+    except Exception as e:
+        state.final_answer = f"Error: {e}"
+        
+    console.print(Panel.fit(str(state.final_answer), title="Single-Agent Baseline"))
 
 
 @app.command("multi-agent")
@@ -47,12 +61,22 @@ def multi_agent(
     _init()
     state = ResearchState(request=ResearchQuery(query=query))
     workflow = MultiAgentWorkflow()
+    import time
+    
+    start_time = time.time()
     try:
         result = workflow.run(state)
+        latency = time.time() - start_time
+        console.print(f"[bold green]Multi-Agent latency:[/bold green] {latency:.2f}s")
+        console.print(f"[bold blue]Route taken:[/bold blue] {result.route_history}")
     except StudentTodoError as exc:
         console.print(Panel.fit(str(exc), title="Expected TODO", style="yellow"))
         raise typer.Exit(code=2) from exc
-    console.print(result.model_dump_json(indent=2))
+    
+    if result.final_answer:
+        console.print(Panel.fit(str(result.final_answer), title="Multi-Agent Result"))
+    else:
+        console.print(result.model_dump_json(indent=2))
 
 
 if __name__ == "__main__":

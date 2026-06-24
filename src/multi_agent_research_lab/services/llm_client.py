@@ -20,10 +20,30 @@ class LLMClient:
     """Provider-agnostic LLM client skeleton."""
 
     def complete(self, system_prompt: str, user_prompt: str) -> LLMResponse:
-        """Return a model completion.
+        """Return a model completion."""
+        import os
+        from langchain_groq import ChatGroq
+        from langchain_core.messages import SystemMessage, HumanMessage
 
-        TODO(student): Connect OpenAI, Azure OpenAI, or another provider.
-        Keep retry, timeout, and token logging here rather than inside agents.
-        """
-
-        raise StudentTodoError("TODO(student): implement LLMClient.complete")
+        model_name = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+        
+        try:
+            llm = ChatGroq(model=model_name, temperature=0.1)
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+            response = llm.invoke(messages)
+            
+            usage = response.response_metadata.get("token_usage", {})
+            input_tokens = usage.get("prompt_tokens", 0)
+            output_tokens = usage.get("completion_tokens", 0)
+            
+            return LLMResponse(
+                content=str(response.content),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_usd=0.0
+            )
+        except Exception as e:
+            raise RuntimeError(f"LLM API Error: {e}")
